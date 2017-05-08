@@ -15,8 +15,36 @@ const NodeFlag = {
   TextArea: 512,
 };
 
-function callCreate(types, options, name, args) {
+function getRootNode(node, path) {
+  while(path.parentPath) {
+    node = path.node;
+    path = path.parentPath;
+  }
+
+  return {
+    node: path.node,
+    index: path.node.body.indexOf(node),
+  };
+}
+
+function addImport(types, options, name, isFactory) {
   const fun = options.pragma && options.pragma[name] || name;
+  const hasImport = isFactory ? options.hasFactoryImport : options.hasImport;
+  const imp = isFactory ? options.factoryImport : options.import;
+
+  if(!hasImport && imp) {
+    const { node, index } = getRootNode(options.path.node, options.path.parentPath);
+    const imports = [ types.ImportSpecifier(types.identifier(fun), types.identifier(fun)) ];
+    node.body.splice(index, 0, types.importDeclaration(imports, types.stringLiteral(imp)));
+
+    options[isFactory ? "hasFactoryImport" : "hasImport"] = true;
+  }
+
+  return fun;
+} 
+
+function callCreate(types, options, name, isFactory, args) {
+  const fun = addImport(types, options, name, isFactory);
   return types.callExpression(types.identifier(fun), args);
 }
 
@@ -226,7 +254,7 @@ function createElement(types, options, ast) {
     else break;
   }
 
-  return callCreate(types, options, factory || "newNode", args);
+  return callCreate(types, options, factory || "newNode", !!factory, args);
 }
 
 function createText(types, options, text) {
@@ -254,6 +282,7 @@ module.exports = options => {
     visitor: {
       JSXElement: {
         enter: (path, state) => {
+          state.opts.path = path;
           path.replaceWith(createNode(types, state.opts, path.node));
         }
       }
