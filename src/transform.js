@@ -233,9 +233,13 @@ function createElement(types, options, ast) {
     childArg = children;
   }
 
+  let builder;
   let args;
-  const factory = flags & NodeFlag.Html && options.factory && options.factory[type.value];
-  if(factory) {
+  const isHtml = flags & NodeFlag.Html;
+  const factory = isHtml && options.factory && options.factory[type.value];
+
+  if(factory || isHtml) {
+    builder = "newHtml";
     flags &= ~NodeFlag.Html;
     args = [
       childArg,
@@ -245,13 +249,16 @@ function createElement(types, options, ast) {
       key != null ? key : nullArg,
       ref != null ? ref : nullArg,
     ];
+
+    if(!factory) args = [type].concat(args);
   } else {
+    builder = "newComponent";
     args = [
-      types.NumericLiteral(flags),
       type,
       props != null ? props : nullArg,
-      className != null ? className : nullArg,
       childArg,
+      (flags > 0 || className != null || key != null || ref != null) ? types.NumericLiteral(flags) : nullArg,
+      className != null ? className : nullArg,
       key != null ? key : nullArg,
       ref != null ? ref : nullArg,
     ];
@@ -262,7 +269,7 @@ function createElement(types, options, ast) {
     else break;
   }
 
-  return callCreate(types, options, factory || "newNode", !!factory, args);
+  return callCreate(types, options, factory || builder, !!factory, args);
 }
 
 function createText(types, options, text) {
