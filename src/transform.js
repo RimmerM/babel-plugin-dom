@@ -29,19 +29,27 @@ function getRootNode(node, path) {
 
 function addImport(types, options, name, isFactory) {
   const fun = options.pragma && options.pragma[name] || name;
-  const hasImport = isFactory ? options.hasFactoryImport : options.hasImport;
   const imp = isFactory ? options.factoryImport : options.import;
 
-  if(!hasImport && imp) {
-    const { node, index } = getRootNode(options.path.node, options.path.parentPath);
-    const imports = [ types.ImportSpecifier(types.identifier(fun), types.identifier(fun)) ];
-    node.body.splice(index, 0, types.importDeclaration(imports, types.stringLiteral(imp)));
-
-    options[isFactory ? "hasFactoryImport" : "hasImport"] = true;
+  if(imp) {
+    const importsField = isFactory ? "addedFactoryImports" : "addedImports";
+    let imports = options[importsField];
+    if(!imports) {
+      imports = { decl: types.importDeclaration([], types.stringLiteral(imp)), entries: {} };
+      options[importsField] = imports;
+      
+      const { node, index } = getRootNode(options.path.node, options.path.parentPath);
+      node.body.splice(index, 0, imports.decl);
+    }
+    
+    if(!imports.entries[fun]) {
+      imports.entries[fun] = true;
+      imports.decl.specifiers.push(types.ImportSpecifier(types.identifier(fun), types.identifier(fun)));
+    }
   }
 
   return fun;
-} 
+}
 
 function callCreate(types, options, name, isFactory, args) {
   const fun = addImport(types, options, name, isFactory);
@@ -226,12 +234,12 @@ function createElement(types, options, ast) {
   }
 
   let args;
-  const factory = flags & NodeFlag.Html && options.factories && options.factories[type.value];
+  const factory = flags & NodeFlag.Html && options.factory && options.factory[type.value];
   if(factory) {
     flags &= ~NodeFlag.Html;
     args = [
-      className != null ? className : nullArg,
       childArg,
+      className != null ? className : nullArg,
       (flags > 0 || props != null || key != null || ref != null) ? types.NumericLiteral(flags) : nullArg,
       props != null ? props : nullArg,
       key != null ? key : nullArg,
